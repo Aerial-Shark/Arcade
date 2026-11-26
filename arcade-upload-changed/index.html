@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Afterglow Arcade</title>
+<meta name="description" content="Original browser games with shared leaderboards. Play on your phone or computer, no install.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Outfit:wght@400;600&display=swap">
+<style>
+/* Layout: a marquee header over a responsive grid of cabinet cards; each card carries its game's own glow colour. Night look only. */
+:root{
+  --void:#0a0c24; --panel:#141233; --line:rgba(178,171,216,.2); --ink:#f3eefe; --dim:#b2abd8; --gold:#ffcf73;
+  --display:"Unbounded",system-ui,sans-serif;
+  --body:"Outfit",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(1200px 600px at 50% -200px,#26185a 0%,var(--void) 60%) var(--void);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5;min-height:100vh}
+.wrap{max-width:1080px;margin:0 auto;padding-block:calc(env(safe-area-inset-top,0px) + 48px) calc(env(safe-area-inset-bottom,0px) + 64px);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:36px}
+header{display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+.eyebrow{margin:0;font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold)}
+h1{margin:0;font:700 clamp(36px,8vw,64px)/1 var(--display);letter-spacing:-.02em;text-wrap:balance}
+h1 span{background:linear-gradient(90deg,#ffcf73,#ff8fd0 45%,#6fc8ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lede{margin:0;max-width:56ch;color:var(--dim);font-size:17px}
+.mode{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:6px 12px}
+.mode i{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+.mode.on i{background:#8fe3a1;box-shadow:0 0 8px #8fe3a1}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:18px}
+.card{position:relative;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:18px;overflow:hidden;min-width:0;transition:transform .2s ease,border-color .2s ease}
+.card:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--hue) 55%,transparent)}
+.art{height:150px;display:grid;place-items:center;background:radial-gradient(160px 120px at 50% 60%,color-mix(in srgb,var(--hue) 28%,transparent),transparent 70%),#0d0b28;border-bottom:1px solid var(--line)}
+.art svg{width:120px;height:120px;overflow:visible}
+.body{display:flex;flex-direction:column;gap:10px;padding:18px;flex:1}
+.body h2{margin:0;font:700 21px/1.15 var(--display)}
+.body p{margin:0;color:var(--dim);font-size:15px}
+.ctrl{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--hue)}
+.top{border-top:1px solid var(--line);padding-top:10px;margin-top:auto}
+.top h3{margin:0 0 6px;font:600 11px var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);display:flex;justify-content:space-between}
+.top ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:2px;font-size:14px}
+.top li{display:grid;grid-template-columns:2ch 1fr auto;gap:10px;font-variant-numeric:tabular-nums}
+.top li .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.top li .r{color:var(--dim)}
+.top li:first-child .n,.top li:first-child .s{color:var(--hue)}
+.play{display:flex;justify-content:center;align-items:center;margin-top:6px;padding:12px;border-radius:12px;background:var(--hue);color:#0a0c24;font:700 15px var(--display);text-decoration:none;letter-spacing:.03em}
+.play::after{content:"";position:absolute;inset:0}
+.play:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+footer{color:var(--dim);font-size:13px;display:flex;flex-direction:column;gap:4px}
+@media (prefers-reduced-motion:reduce){.card{transition:none}.card:hover{transform:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Free · no install · phone or computer</p>
+    <h1><span>Afterglow</span> Arcade</h1>
+    <p class="lede">A shelf of small original games built for quick runs and friendly rivalry. Pick one, set a score, and send the link to your friends.</p>
+    <span class="mode" id="mode"><i></i><span id="modeText">Checking scoreboard…</span></span>
+  </header>
+
+  <main class="grid" id="grid" aria-label="Games"></main>
+
+  <footer>
+    <span>Every game saves your personal best on this device.</span>
+    <span>Scores are self-reported by the browser, so treat the board as friendly competition.</span>
+  </footer>
+</div>
+
+<template id="cardTpl">
+  <article class="card">
+    <div class="art" aria-hidden="true"></div>
+    <div class="body">
+      <span class="ctrl"></span>
+      <h2></h2>
+      <p class="tag"></p>
+      <div class="top">
+        <h3><span>Top scores</span><span class="pb"></span></h3>
+        <ol></ol>
+      </div>
+      <a class="play">Play</a>
+    </div>
+  </article>
+</template>
+
+<script src="shared/config.js"></script>
+<script src="shared/leaderboard.js"></script>
+<script>
+(() => {
+  'use strict';
+  const ART = {
+    perihelion: '<svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="44" fill="none" stroke="var(--hue)" stroke-opacity=".5" stroke-dasharray="4 7"/><circle cx="60" cy="60" r="20" fill="var(--hue)"/><circle cx="52" cy="52" r="6" fill="#fff6e8" opacity=".8"/><circle cx="100" cy="44" r="5" fill="#fffaf0"/><path d="M100 44 C 112 70, 104 96, 84 108" fill="none" stroke="#fffaf0" stroke-opacity=".5" stroke-dasharray="2 6" stroke-linecap="round"/></svg>',
+    hexbloom: '<svg viewBox="0 0 120 120"><polygon points="60,12 101,36 101,84 60,108 19,84 19,36" fill="none" stroke="var(--hue)" stroke-opacity=".55" stroke-width="2"/><g fill="var(--hue)"><circle cx="60" cy="44" r="11"/><circle cx="75" cy="56" r="11"/><circle cx="69" cy="74" r="11"/><circle cx="51" cy="74" r="11"/><circle cx="45" cy="56" r="11"/></g><circle cx="60" cy="60" r="8" fill="#ffcf73"/></svg>',
+    courier: '<svg viewBox="0 0 120 120"><path d="M28 104 L70 46" stroke="var(--hue)" stroke-opacity=".35" stroke-width="16" stroke-linecap="round"/><path d="M38 96 L72 48" stroke="var(--hue)" stroke-opacity=".6" stroke-width="8" stroke-linecap="round"/><circle cx="76" cy="42" r="12" fill="#eaf7ff"/><rect x="90" y="70" width="14" height="14" rx="3" fill="#ffcf73" transform="rotate(15 97 77)"/><circle cx="28" cy="30" r="7" fill="#5a6a8f"/></svg>',
+    coreguard: '<svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="16" fill="var(--hue)"/><circle cx="60" cy="60" r="24" fill="none" stroke="var(--hue)" stroke-opacity=".6" stroke-width="2"/><circle cx="60" cy="60" r="31" fill="none" stroke="var(--hue)" stroke-opacity=".35" stroke-width="2"/><g fill="#f3eefe"><circle cx="16" cy="30" r="5"/><rect x="96" y="20" width="10" height="10" transform="rotate(45 101 25)"/><polygon points="100,98 108,108 92,108"/><circle cx="20" cy="96" r="4"/></g></svg>',
+    emberleap: '<svg viewBox="0 0 120 120"><path d="M6 104 H40 V84 H62 V104 H72 V78 H114 V116 H6 Z" fill="#1f2350"/><rect x="88" y="66" width="8" height="12" fill="#1f2350"/><circle cx="56" cy="46" r="26" fill="var(--hue)" opacity=".18"/><path d="M56 30 C 64 40, 62 48, 56 54 C 50 48, 48 40, 56 30Z" fill="var(--hue)"/><circle cx="96" cy="22" r="9" fill="#f3eefe" opacity=".85"/></svg>',
+    wordrush: '<svg viewBox="0 0 120 120"><g fill="var(--hue)"><rect x="10" y="44" width="30" height="36" rx="7"/><rect x="45" y="36" width="30" height="36" rx="7"/><rect x="80" y="44" width="30" height="36" rx="7"/></g><g fill="#0a0c24" font-family="Unbounded,sans-serif" font-weight="700" font-size="19" text-anchor="middle"><text x="25" y="69">A</text><text x="60" y="61">B</text><text x="95" y="69">C</text></g></svg>',
+    echo: '<svg viewBox="0 0 120 120"><rect x="18" y="18" width="38" height="38" rx="10" fill="var(--hue)"/><rect x="64" y="18" width="38" height="38" rx="10" fill="#ffcf73" opacity=".35"/><rect x="18" y="64" width="38" height="38" rx="10" fill="#ff8fd0" opacity=".35"/><rect x="64" y="64" width="38" height="38" rx="10" fill="#6f9bff" opacity=".35"/></svg>',
+    prism: '<svg viewBox="0 0 120 120"><g fill="var(--hue)"><rect x="12" y="18" width="28" height="12" rx="3"/><rect x="46" y="18" width="28" height="12" rx="3"/><rect x="80" y="18" width="28" height="12" rx="3"/><rect x="12" y="36" width="28" height="12" rx="3" opacity=".6"/><rect x="80" y="36" width="28" height="12" rx="3" opacity=".6"/></g><circle cx="66" cy="70" r="7" fill="#f3eefe"/><rect x="36" y="98" width="48" height="9" rx="4.5" fill="#f3eefe"/></svg>',
+    trail: '<svg viewBox="0 0 120 120"><path d="M20 92 H60 V52 H92" fill="none" stroke="var(--hue)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/><circle cx="92" cy="52" r="8" fill="#f3ffe0"/><rect x="84" y="16" width="14" height="14" rx="4" fill="#ffcf73"/></svg>',
+    beatdrop: '<svg viewBox="0 0 120 120"><g stroke="var(--hue)" stroke-opacity=".35" stroke-width="2"><path d="M24 8V112M48 8V112M72 8V112M96 8V112"/></g><g fill="var(--hue)"><rect x="13" y="24" width="22" height="12" rx="6"/><rect x="61" y="46" width="22" height="12" rx="6"/><rect x="37" y="70" width="22" height="12" rx="6"/></g><rect x="85" y="90" width="22" height="12" rx="6" fill="#f3eefe"/></svg>',
+    skystack: '<svg viewBox="0 0 120 120"><g fill="var(--hue)"><rect x="28" y="94" width="64" height="14" rx="3"/><rect x="34" y="76" width="56" height="14" rx="3" opacity=".85"/><rect x="40" y="58" width="46" height="14" rx="3" opacity=".7"/><rect x="44" y="40" width="38" height="14" rx="3" opacity=".55"/></g><rect x="62" y="16" width="38" height="14" rx="3" fill="#f3eefe"/></svg>',
+    flashtap: '<svg viewBox="0 0 120 120"><g fill="#f3eefe" opacity=".2"><circle cx="30" cy="30" r="12"/><circle cx="60" cy="30" r="12"/><circle cx="90" cy="30" r="12"/><circle cx="30" cy="60" r="12"/><circle cx="90" cy="60" r="12"/><circle cx="30" cy="90" r="12"/><circle cx="60" cy="90" r="12"/><circle cx="90" cy="90" r="12"/></g><circle cx="60" cy="60" r="14" fill="var(--hue)"/></svg>',
+    crates: '<svg viewBox="0 0 120 120"><rect x="20" y="46" width="36" height="36" rx="6" fill="var(--hue)"/><rect x="30" y="56" width="16" height="16" fill="none" stroke="#0a0c24" stroke-opacity=".45" stroke-width="3"/><circle cx="88" cy="64" r="12" fill="none" stroke="var(--hue)" stroke-width="3"/><path d="M60 64H72" stroke="#f3eefe" stroke-width="3" stroke-linecap="round"/></svg>',
+    hockey: '<svg viewBox="0 0 120 120"><rect x="26" y="8" width="68" height="104" rx="12" fill="none" stroke="var(--hue)" stroke-opacity=".55" stroke-width="2"/><path d="M26 60H94" stroke="var(--hue)" stroke-opacity=".55" stroke-width="2"/><circle cx="52" cy="30" r="11" fill="#ff8fd0"/><circle cx="68" cy="90" r="11" fill="var(--hue)"/><circle cx="62" cy="58" r="6" fill="#f3eefe"/></svg>'
+  };
+  const grid = document.getElementById('grid');
+  const tpl = document.getElementById('cardTpl');
+  const fmt = n => Number(n).toLocaleString();
+
+  const mode = document.getElementById('mode');
+  if (Arcade.online) { mode.classList.add('on'); document.getElementById('modeText').textContent = 'Shared leaderboards are live'; }
+  else document.getElementById('modeText').textContent = 'Leaderboards save on this device for now';
+
+  for (const g of Arcade.GAMES) {
+    const node = tpl.content.firstElementChild.cloneNode(true);
+    node.style.setProperty('--hue', g.hue);
+    node.querySelector('.art').innerHTML = ART[g.slug] || '';
+    node.querySelector('.ctrl').textContent = g.controls;
+    node.querySelector('h2').textContent = g.name;
+    node.querySelector('.tag').textContent = g.tagline;
+    const pb = Arcade.personalBest(g.slug);
+    node.querySelector('.pb').textContent = pb ? 'Your best ' + fmt(pb) : '';
+    const a = node.querySelector('.play');
+    a.href = 'games/' + g.slug + '/';
+    a.setAttribute('aria-label', 'Play ' + g.name);
+    grid.appendChild(node);
+    const list = node.querySelector('ol');
+    Arcade.topScores(g.slug, 3).then(rows => {
+      if (!rows.length) { const li = document.createElement('li'); li.innerHTML = '<span class="r"></span><span class="n"></span><span></span>'; li.querySelector('.n').textContent = 'No scores yet'; list.appendChild(li); return; }
+      rows.forEach((r, i) => {
+        const li = document.createElement('li');
+        const rank = document.createElement('span'); rank.className = 'r'; rank.textContent = i + 1;
+        const n = document.createElement('span'); n.className = 'n'; n.textContent = r.name;
+        const s = document.createElement('span'); s.className = 's'; s.textContent = fmt(r.score);
+        li.append(rank, n, s); list.appendChild(li);
+      });
+    }).catch(() => {
+      const li = document.createElement('li'); li.textContent = 'Scores unavailable right now'; list.appendChild(li);
+    });
+  }
+})();
+</script>
+</body>
+</html>

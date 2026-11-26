@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Beat Drop · Afterglow Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Outfit:wght@400;600&display=swap">
+<link rel="stylesheet" href="../../shared/kit.css">
+</head>
+<body>
+<script src="../../shared/config.js"></script>
+<script src="../../shared/leaderboard.js"></script>
+<script src="../../shared/kit.js"></script>
+<script>
+(() => {
+  'use strict';
+  /* Layout: full-screen canvas; four lanes in a centred column, notes fall to a hit line near the bottom. */
+  const { beep } = Kit;
+  const K = Kit.canvas(), ctx = K.ctx, set = Kit.hud(['Energy', 'Score', 'Combo']);
+  const KEYS = ['d', 'f', 'j', 'k'], HUES = ['#6f9bff', '#7fe0d0', '#ffcf73', '#ff8fd0'], TONES = [262, 330, 392, 494], TRAVEL = 1.5, WIN = .17;
+  let notes = [], t = 0, nextBeat = 0, score = 0, combo = 0, best = 0, hp = 10, hitsN = 0, playing = false, flash = [0, 0, 0, 0], word = '', wordT = 0, lastLane = -1;
+  const G = () => { const W = Math.min(K.w - 16, 440); return { L: (K.w - W) / 2, W, lw: W / 4, hit: K.h - 150 }; };
+  const bpm = () => Math.min(168, 92 + t * .85);
+
+  function reset() { notes = []; t = 0; nextBeat = 1.2; score = 0; combo = 0; best = 0; hp = 10; hitsN = 0; word = ''; playing = true; }
+  function say(w) { word = w; wordT = .5; }
+  function miss() { combo = 0; hp--; say('Miss'); beep(140, .12, 'square', .05); if (hp <= 0) { playing = false; Kit.over('beatdrop', score, 'Out of energy', 'You kept the beat for ' + Math.round(t) + ' seconds.', [['Notes hit', hitsN], ['Best combo', best]], reset); } }
+  function press(l) {
+    if (!playing || Kit.busy()) return;
+    flash[l] = .15;
+    const n = notes.find(x => x.l === l && !x.done && Math.abs(x.at - t) <= WIN);
+    if (!n) { miss(); return; }
+    n.done = true; combo++; hitsN++; best = Math.max(best, combo);
+    const good = Math.abs(n.at - t) < .065, mult = 1 + Math.min(4, Math.floor(combo / 10));
+    score += (good ? 100 : 50) * mult; say(good ? 'Perfect' : 'Good');
+    if (combo % 12 === 0 && hp < 10) hp++;
+    beep(TONES[l] * (good ? 2 : 1), .14, 'triangle', .16);
+  }
+  function step(dt) {
+    t += dt;
+    while (nextBeat < t + TRAVEL) {
+      const gap = 60 / bpm(), dense = Math.min(.5, t / 90);
+      let l; do { l = Math.random() * 4 | 0; } while (l === lastLane && Math.random() < .7);
+      lastLane = l; notes.push({ l, at: nextBeat });
+      if (Math.random() < dense * .5) notes.push({ l: (l + 2) % 4, at: nextBeat });
+      nextBeat += Math.random() < dense ? gap / 2 : gap;
+    }
+    for (const n of notes) if (!n.done && t - n.at > WIN) { n.done = true; n.lost = true; miss(); if (!playing) return; }
+    notes = notes.filter(n => t - n.at < .4);
+  }
+  function draw(dt) {
+    const g = G();
+    ctx.clearRect(0, 0, K.w, K.h);
+    for (let l = 0; l < 4; l++) {
+      flash[l] = Math.max(0, flash[l] - dt);
+      ctx.fillStyle = flash[l] ? HUES[l] + '44' : 'rgba(20,18,51,' + (l % 2 ? .7 : .5) + ')';
+      ctx.fillRect(g.L + l * g.lw, 0, g.lw, K.h);
+      ctx.strokeStyle = HUES[l]; ctx.lineWidth = 3; ctx.globalAlpha = flash[l] ? 1 : .55;
+      ctx.beginPath(); ctx.roundRect(g.L + l * g.lw + 6, g.hit - 14, g.lw - 12, 28, 10); ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.fillStyle = '#b2abd8'; ctx.font = '600 13px Outfit, system-ui, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(KEYS[l].toUpperCase(), g.L + l * g.lw + g.lw / 2, g.hit + 42);
+    }
+    for (const n of notes) {
+      if (n.done && !n.lost) continue;
+      const y = g.hit - (n.at - t) / TRAVEL * (g.hit + 30);
+      ctx.fillStyle = HUES[n.l]; ctx.globalAlpha = n.lost ? .25 : 1;
+      ctx.beginPath(); ctx.roundRect(g.L + n.l * g.lw + 10, y - 10, g.lw - 20, 20, 9); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if (wordT > 0) { wordT -= dt; ctx.fillStyle = '#f3eefe'; ctx.globalAlpha = Math.min(1, wordT * 4); ctx.font = '700 22px Unbounded, system-ui, sans-serif'; ctx.fillText(word, K.w / 2, g.hit - 70); ctx.globalAlpha = 1; }
+  }
+
+  Kit.start({ title: 'Beat Drop', eyebrow: 'Rhythm game', hue: '#6f9bff',
+    text: 'Notes fall down four lanes. Tap a lane when its note reaches the ring. Good timing builds a combo and a score multiplier. Misses drain your energy. Tap the lanes, or use D, F, J and K.',
+    onStart: reset });
+  window.addEventListener('pointerdown', e => { const g = G(); press(Math.max(0, Math.min(3, Math.floor((e.clientX - g.L) / g.lw)))); });
+  window.addEventListener('keydown', e => { const l = KEYS.indexOf(e.key.toLowerCase()); if (l >= 0 && !e.repeat) press(l); });
+  Kit.loop(dt => { if (playing && !Kit.busy()) { step(dt); set('▮'.repeat(Math.max(0, hp)) || '0', score.toLocaleString(), combo); } draw(dt); });
+})();
+</script>
+</body>
+</html>

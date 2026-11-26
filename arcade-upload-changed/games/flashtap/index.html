@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Flash Tap · Afterglow Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Outfit:wght@400;600&display=swap">
+<link rel="stylesheet" href="../../shared/kit.css">
+<style>
+/* Layout: a 4x4 grid of round pads centred under the HUD, with one status line above. */
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;width:min(90vw,60vh,400px);aspect-ratio:1}
+.pad{border:1px solid var(--line);border-radius:50%;background:#141233;cursor:pointer;padding:0}
+.pad.go{background:var(--hue);border-color:var(--hue);box-shadow:0 0 26px var(--hue)}
+.pad.no{background:#6f9bff;border-color:#6f9bff;box-shadow:0 0 26px #6f9bff}
+.pad:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+</style>
+</head>
+<body>
+<main class="k-stage">
+  <p class="k-note" id="note" aria-live="polite">Tap red. Leave blue alone.</p>
+  <div class="grid" id="grid"></div>
+</main>
+<script src="../../shared/config.js"></script>
+<script src="../../shared/leaderboard.js"></script>
+<script src="../../shared/kit.js"></script>
+<script>
+(() => {
+  'use strict';
+  const { $, beep } = Kit;
+  const KEYS = '1234qwerasdfzxcv';
+  const note = document.getElementById('note'), grid = document.getElementById('grid');
+  const set = Kit.hud(['Lives', 'Score', 'Avg']);
+  let score = 0, lives = 3, hits = 0, total = 0, fastest = 9999, target = -1, decoy = false, lit = 0, timer = 0, playing = false;
+
+  const pads = [...KEYS].map((k, i) => {
+    const b = $('button', 'pad'); b.type = 'button'; b.setAttribute('aria-label', 'Pad ' + (i + 1) + ', key ' + k.toUpperCase());
+    b.addEventListener('pointerdown', e => { e.preventDefault(); press(i); });
+    b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); press(i); } });
+    grid.append(b); return b;
+  });
+  const hud = () => set('●'.repeat(lives) || '0', score.toLocaleString(), hits ? Math.round(total / hits) + ' ms' : '–');
+  function off() { if (target >= 0) pads[target].className = 'pad'; target = -1; }
+  function queue() { clearTimeout(timer); timer = setTimeout(light, Kit.rnd(350, Math.max(500, 1200 - hits * 15))); }
+  function light() {
+    if (!playing) return;
+    let i; do { i = Math.random() * 16 | 0; } while (i === target);
+    off(); target = i; decoy = hits >= 8 && Math.random() < .22;
+    pads[i].className = 'pad ' + (decoy ? 'no' : 'go'); lit = performance.now();
+    timer = setTimeout(expire, decoy ? 700 : Math.max(420, 1150 - hits * 22));
+  }
+  function expire() { if (!playing) return; if (decoy) { off(); queue(); } else strike('Too slow'); }
+  function strike(why) {
+    off(); lives--; note.textContent = why; beep(150, .2, 'square', .06); hud();
+    if (lives <= 0) {
+      playing = false; clearTimeout(timer);
+      Kit.over('flashtap', score, 'Out of lives', hits ? 'Fastest tap: ' + fastest + ' ms.' : 'No taps landed.', [['Hits', hits], ['Average', hits ? Math.round(total / hits) + ' ms' : '–']], reset);
+    } else queue();
+  }
+  function press(i) {
+    if (!playing || Kit.busy()) return;
+    if (i !== target) { clearTimeout(timer); strike('Wrong pad'); return; }
+    clearTimeout(timer);
+    if (decoy) { strike('That one was blue'); return; }
+    const rt = Math.round(performance.now() - lit), pts = Math.max(10, 600 - rt);
+    hits++; total += rt; fastest = Math.min(fastest, rt); score += pts;
+    note.textContent = rt + ' ms  +' + pts; beep(700 + Math.max(0, 500 - rt), .07);
+    off(); hud(); queue();
+  }
+  function reset() { score = 0; lives = 3; hits = 0; total = 0; fastest = 9999; playing = true; note.textContent = 'Tap red. Leave blue alone.'; hud(); queue(); }
+
+  Kit.start({ title: 'Flash Tap', eyebrow: 'Reflex test', hue: '#ff6f6f',
+    text: 'A pad lights red: tap it as fast as you can. Faster taps score more. Blue pads are decoys, so leave them. Three mistakes end the run. On a keyboard the grid is 1234, QWER, ASDF, ZXCV.',
+    onStart: reset });
+  window.addEventListener('keydown', e => { const i = KEYS.indexOf(e.key.toLowerCase()); if (i >= 0 && !e.repeat && e.target.tagName !== 'INPUT') press(i); });
+  hud();
+})();
+</script>
+</body>
+</html>

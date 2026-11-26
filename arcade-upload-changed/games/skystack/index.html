@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sky Stack · Afterglow Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Outfit:wght@400;600&display=swap">
+<link rel="stylesheet" href="../../shared/kit.css">
+</head>
+<body>
+<script src="../../shared/config.js"></script>
+<script src="../../shared/leaderboard.js"></script>
+<script src="../../shared/kit.js"></script>
+<script>
+(() => {
+  'use strict';
+  /* Layout: full-screen canvas; the tower rises from the bottom centre and the view scrolls up with it. */
+  const { beep } = Kit;
+  const K = Kit.canvas(), ctx = K.ctx, set = Kit.hud(['Floors', 'Score', 'Perfect']);
+  const BH = 30;
+  let stack = [], cur = null, bits = [], score = 0, perfect = 0, streak = 0, cam = 0, playing = false, phase = 0;
+  const hue = i => 'hsl(' + ((28 + i * 9) % 360) + ' 90% 68%)';
+
+  function spawn() {
+    const top = stack[stack.length - 1], n = stack.length;
+    cur = { w: top.w, x: 0, dir: n % 2 ? 1 : -1, speed: Math.min(520, 190 + n * 9) };
+    phase = 0; cur.x = -cur.dir * (K.w / 2 + cur.w / 2 - 20);
+  }
+  function reset() { stack = [{ x: 0, w: Math.min(230, K.w * .58) }]; bits = []; score = 0; perfect = 0; streak = 0; cam = 0; playing = true; spawn(); }
+  function drop() {
+    if (!playing || Kit.busy() || !cur) return;
+    const top = stack[stack.length - 1], off = cur.x - top.x, n = stack.length;
+    if (Math.abs(off) <= 5) {
+      streak++; perfect++; score += 10 + 15 * Math.min(6, streak);
+      stack.push({ x: top.x, w: Math.min(top.w + (streak >= 3 ? 6 : 0), Math.min(230, K.w * .58)) });
+      beep(660 + Math.min(8, streak) * 60, .12);
+    } else {
+      const w = top.w - Math.abs(off);
+      if (w <= 0) {
+        bits.push({ x: cur.x, w: cur.w, y: n * BH, vy: 0, i: n }); cur = null; playing = false;
+        setTimeout(() => Kit.over('skystack', score, 'Missed the tower', 'You stacked ' + (n - 1) + ' floors.', [['Floors', n - 1], ['Perfect drops', perfect]], reset), 500);
+        return;
+      }
+      streak = 0; score += 10;
+      stack.push({ x: top.x + off / 2, w });
+      bits.push({ x: cur.x + (off > 0 ? w / 2 : -w / 2), w: Math.abs(off), y: n * BH, vy: 0, i: n });
+      beep(360, .08);
+    }
+    spawn();
+  }
+  function draw(dt) {
+    ctx.clearRect(0, 0, K.w, K.h);
+    const cx = K.w / 2, base = K.h - 110, target = Math.max(0, stack.length * BH - K.h * .42);
+    cam += (target - cam) * Math.min(1, dt * 5);
+    const rect = (x, w, level, i) => { ctx.fillStyle = hue(i); ctx.beginPath(); ctx.roundRect(cx + x - w / 2, base - level - BH + cam, w, BH - 3, 5); ctx.fill(); };
+    stack.forEach((b, i) => { if (base - i * BH + cam > -BH) rect(b.x, b.w, i * BH, i); });
+    bits = bits.filter(b => b.y > cam - 300);
+    bits.forEach(b => { b.vy += 900 * dt; b.y -= b.vy * dt; ctx.globalAlpha = .7; rect(b.x, b.w, b.y, b.i); ctx.globalAlpha = 1; });
+    if (cur) {
+      if (playing && !Kit.busy()) { cur.x += cur.dir * cur.speed * dt; const lim = K.w / 2 - cur.w / 2 - 6; if (cur.x > lim) { cur.x = lim; cur.dir = -1; } if (cur.x < -lim) { cur.x = -lim; cur.dir = 1; } }
+      rect(cur.x, cur.w, stack.length * BH + 6, stack.length);
+    }
+  }
+
+  Kit.start({ title: 'Sky Stack', eyebrow: 'Stacker', hue: '#ffb86b',
+    text: 'A block slides across the top of the tower. Tap to drop it. Anything hanging over the edge is cut off, so the tower gets narrower. Perfect drops score extra and can widen it again. Tap, click or press Space.',
+    onStart: reset });
+  window.addEventListener('pointerdown', drop);
+  window.addEventListener('keydown', e => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); drop(); } });
+  Kit.loop(dt => { draw(dt); if (playing) set(stack.length - 1, score.toLocaleString(), perfect); });
+})();
+</script>
+</body>
+</html>

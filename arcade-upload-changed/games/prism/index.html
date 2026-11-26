@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Prism Break · Afterglow Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Outfit:wght@400;600&display=swap">
+<link rel="stylesheet" href="../../shared/kit.css">
+</head>
+<body>
+<script src="../../shared/config.js"></script>
+<script src="../../shared/leaderboard.js"></script>
+<script src="../../shared/kit.js"></script>
+<script>
+(() => {
+  'use strict';
+  /* Layout: full-screen canvas; a centred play column holds bricks at the top and the paddle near the bottom. */
+  const { beep } = Kit;
+  const K = Kit.canvas(), ctx = K.ctx, set = Kit.hud(['Lives', 'Score', 'Level']);
+  const COLS = 8, HUES = ['#ff8fd0', '#ffcf73', '#8fe3a1', '#6fc8ff', '#c9a2ff', '#ff9f4a', '#7fe0d0', '#ff6f91'];
+  let bricks = [], ball, px = 0, pw = 90, score = 0, lives = 3, level = 1, combo = 0, playing = false, hold = 0, keyDir = 0;
+  const F = () => { const W = Math.min(K.w - 16, 520); return { L: (K.w - W) / 2, W, T: 84, B: K.h - 78 }; };
+  const brick = (b, f) => { const bw = f.W / COLS, bh = Math.min(26, (f.B - f.T) * .045 + 8); return { x: f.L + b.c * bw + 2, y: f.T + b.r * (bh + 4), w: bw - 4, h: bh }; };
+
+  function build() {
+    bricks = [];
+    const rows = Math.min(8, 3 + level);
+    for (let r = 0; r < rows; r++) for (let c = 0; c < COLS; c++) {
+      if (level > 2 && (r + c + level) % 7 === 0) continue;
+      bricks.push({ r, c, hp: level > 3 && r < 2 ? 2 : 1 });
+    }
+  }
+  function serve() { const f = F(); ball = { x: px, y: f.B - 24, vx: 0, vy: 0, r: 7 }; hold = .7; combo = 0; }
+  function reset() { const f = F(); score = 0; lives = 3; level = 1; px = f.L + f.W / 2; build(); serve(); playing = true; }
+  function speed() { return Math.min(620, 330 + level * 28); }
+  function lose() {
+    lives--; beep(150, .25, 'square', .06);
+    if (lives <= 0) { playing = false; Kit.over('prism', score, 'Out of lives', 'You reached level ' + level + '.', [['Level', level]], reset); }
+    else serve();
+  }
+  function step(dt) {
+    const f = F(); pw = Math.max(64, f.W * .2 - level * 2);
+    px = Math.max(f.L + pw / 2, Math.min(f.L + f.W - pw / 2, px + keyDir * 560 * dt));
+    if (hold > 0) { hold -= dt; ball.x = px; ball.y = f.B - 24; if (hold <= 0) { const a = Kit.rnd(-.5, .5); ball.vx = speed() * Math.sin(a); ball.vy = -speed() * Math.cos(a); } return; }
+    for (let n = 0; n < 4; n++) {
+      ball.x += ball.vx * dt / 4; ball.y += ball.vy * dt / 4;
+      if (ball.x < f.L + ball.r) { ball.x = f.L + ball.r; ball.vx = Math.abs(ball.vx); }
+      if (ball.x > f.L + f.W - ball.r) { ball.x = f.L + f.W - ball.r; ball.vx = -Math.abs(ball.vx); }
+      if (ball.y < f.T - 30 + ball.r) { ball.y = f.T - 30 + ball.r; ball.vy = Math.abs(ball.vy); }
+      if (ball.vy > 0 && ball.y + ball.r >= f.B - 12 && ball.y + ball.r <= f.B + 6 && Math.abs(ball.x - px) <= pw / 2 + ball.r) {
+        const a = Math.max(-1, Math.min(1, (ball.x - px) / (pw / 2))) * 1.05, s = speed();
+        ball.vx = s * Math.sin(a); ball.vy = -s * Math.cos(a); ball.y = f.B - 12 - ball.r; combo = 0; beep(300, .05);
+      }
+      if (ball.y > K.h + 20) { lose(); return; }
+      for (const b of bricks) {
+        if (b.hp <= 0) continue;
+        const q = brick(b, f), nx = Math.max(q.x, Math.min(q.x + q.w, ball.x)), ny = Math.max(q.y, Math.min(q.y + q.h, ball.y));
+        const dx = ball.x - nx, dy = ball.y - ny;
+        if (dx * dx + dy * dy > ball.r * ball.r) continue;
+        if (Math.abs(dx) > Math.abs(dy)) ball.vx = dx > 0 ? Math.abs(ball.vx) : -Math.abs(ball.vx);
+        else ball.vy = dy > 0 ? Math.abs(ball.vy) : -Math.abs(ball.vy);
+        b.hp--; combo++;
+        if (b.hp <= 0) { score += 10 * level * Math.min(8, combo); beep(520 + combo * 40, .06); } else beep(240, .05);
+        break;
+      }
+    }
+    if (!bricks.some(b => b.hp > 0)) { level++; score += 250; beep(880, .2); build(); serve(); }
+  }
+  function draw() {
+    const f = F();
+    ctx.clearRect(0, 0, K.w, K.h);
+    ctx.strokeStyle = 'rgba(178,171,216,.18)'; ctx.strokeRect(f.L + .5, f.T - 30, f.W - 1, K.h);
+    for (const b of bricks) {
+      if (b.hp <= 0) continue;
+      const q = brick(b, f);
+      ctx.fillStyle = HUES[b.r % HUES.length]; ctx.globalAlpha = b.hp > 1 ? 1 : .8;
+      ctx.beginPath(); ctx.roundRect(q.x, q.y, q.w, q.h, 5); ctx.fill();
+      if (b.hp > 1) { ctx.strokeStyle = '#f3eefe'; ctx.lineWidth = 2; ctx.stroke(); }
+    }
+    ctx.globalAlpha = 1; ctx.lineWidth = 1;
+    ctx.fillStyle = '#f3eefe'; ctx.beginPath(); ctx.roundRect(px - pw / 2, f.B - 12, pw, 12, 6); ctx.fill();
+    if (ball) { ctx.shadowColor = '#ff8fd0'; ctx.shadowBlur = 16; ctx.fillStyle = '#ff8fd0'; ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, 7); ctx.fill(); ctx.shadowBlur = 0; }
+  }
+
+  Kit.start({ title: 'Prism Break', eyebrow: 'Brick breaker', hue: '#ff8fd0',
+    text: 'Bounce the ball off your paddle to clear every brick. Breaking several bricks before the ball returns builds a combo. Drag or move the mouse to steer, or use the arrow keys.',
+    onStart: reset });
+  const move = e => { if (playing && !Kit.busy()) px = e.clientX; };
+  window.addEventListener('pointermove', move); window.addEventListener('pointerdown', move);
+  window.addEventListener('keydown', e => { if (e.key === 'ArrowLeft' || e.key === 'a') keyDir = -1; if (e.key === 'ArrowRight' || e.key === 'd') keyDir = 1; });
+  window.addEventListener('keyup', e => { if (['ArrowLeft', 'ArrowRight', 'a', 'd'].includes(e.key)) keyDir = 0; });
+  Kit.loop(dt => { if (playing && !Kit.busy()) { step(dt); set('●'.repeat(lives) || '0', score.toLocaleString(), level); } draw(); });
+})();
+</script>
+</body>
+</html>

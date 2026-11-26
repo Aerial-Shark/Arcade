@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Word Rush · Afterglow Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Outfit:wght@400;600&display=swap">
+<link rel="stylesheet" href="../../shared/kit.css">
+<style>
+/* Layout: answer slots over a rack of letter tiles, two small actions below; everything centred in one column. */
+.slots,.rack{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-width:420px}
+.slot,.tile{width:46px;height:54px;border-radius:10px;font:700 24px var(--display);text-transform:uppercase;display:grid;place-items:center;padding:0;cursor:pointer}
+.slot{background:transparent;border:2px dashed var(--line);color:var(--ink)}
+.slot.on{border-style:solid;border-color:var(--hue);background:rgba(201,162,255,.14)}
+.tile{background:var(--hue);color:#0a0c24;border:0}
+.tile:disabled{opacity:.18;cursor:default}
+.slot:focus-visible,.tile:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.acts{display:flex;gap:10px}
+.bad .slot{border-color:#ff8f8f;animation:shake .3s}
+@keyframes shake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+@media (prefers-reduced-motion:reduce){.bad .slot{animation:none}}
+</style>
+</head>
+<body>
+<main class="k-stage">
+  <p class="k-note" id="note">Unscramble the word</p>
+  <div class="slots" id="slots" aria-label="Your answer"></div>
+  <div class="rack" id="rack" aria-label="Letters"></div>
+  <div class="acts">
+    <button class="k-btn ghost" id="clear" type="button">Clear</button>
+    <button class="k-btn ghost" id="skip" type="button">Skip (−3s)</button>
+  </div>
+</main>
+<script src="../../shared/config.js"></script>
+<script src="../../shared/leaderboard.js"></script>
+<script src="../../shared/kit.js"></script>
+<script>
+(() => {
+  'use strict';
+  const { $, beep } = Kit;
+  const WORDS = [...new Set(('comet ember glow orbit lunar spark flame prism laser pixel arcade rocket planet meteor galaxy nebula cosmic signal shadow candle lantern beacon mirror winter garden silver golden bridge castle dragon wizard puzzle rhythm guitar violin magnet engine turbo circuit battery crystal diamond emerald thunder breeze island jungle desert canyon harbor anchor compass voyage pirate treasure knight shield falcon tiger panda koala dolphin turtle rabbit monkey banana cherry orange lemon melon pepper ginger cookie waffle noodle pickle butter cheese pocket jacket button ribbon basket bottle window ladder hammer pencil marker camera record ticket trophy medal victory stream forest meadow sunset aurora comic rocket').split(' '))];
+  const VALID = new Set(WORDS);
+  const slots = document.getElementById('slots'), rack = document.getElementById('rack'), note = document.getElementById('note');
+  const set = Kit.hud(['Time', 'Score', 'Streak']);
+  let word = '', tiles = [], ans = [], score = 0, streak = 0, bestStreak = 0, solved = 0, time = 60, playing = false, last = '';
+
+  function next() {
+    do { word = Kit.pick(WORDS); } while (word === last);
+    last = word;
+    let l;
+    do { l = word.split('').sort(() => Math.random() - .5); } while (l.join('') === word);
+    tiles = l.map(c => ({ c, used: false })); ans = [];
+    draw();
+  }
+  function draw() {
+    slots.textContent = ''; rack.textContent = '';
+    for (let i = 0; i < word.length; i++) {
+      const has = i < ans.length, b = $('button', 'slot' + (has ? ' on' : ''), has ? tiles[ans[i]].c : '');
+      b.type = 'button'; b.setAttribute('aria-label', has ? 'Remove ' + tiles[ans[i]].c : 'Empty slot');
+      b.addEventListener('click', () => { if (has && playing) { tiles[ans.splice(i, 1)[0]].used = false; draw(); } });
+      slots.append(b);
+    }
+    tiles.forEach((t, i) => {
+      const b = $('button', 'tile', t.c); b.type = 'button'; b.disabled = t.used;
+      b.addEventListener('click', () => pick(i));
+      rack.append(b);
+    });
+  }
+  function pick(i) {
+    if (!playing || tiles[i].used || ans.length >= word.length) return;
+    tiles[i].used = true; ans.push(i); beep(480 + ans.length * 45, .05);
+    draw();
+    if (ans.length === word.length) check();
+  }
+  function clear() { ans.forEach(i => { tiles[i].used = false; }); ans = []; draw(); }
+  function check() {
+    const a = ans.map(i => tiles[i].c).join('');
+    if (VALID.has(a)) {
+      streak++; solved++; bestStreak = Math.max(bestStreak, streak);
+      const pts = a.length * 10 * Math.min(5, 1 + Math.floor(streak / 3));
+      score += pts; time = Math.min(75, time + 2);
+      note.textContent = '+' + pts + '  ' + a.toUpperCase();
+      beep(880, .12); setTimeout(() => beep(1175, .14), 90);
+      next();
+    } else {
+      streak = 0; note.textContent = 'Not a word here. Try again.';
+      beep(160, .2, 'square', .06);
+      slots.classList.add('bad'); setTimeout(() => { slots.classList.remove('bad'); }, 320);
+      clear();
+    }
+  }
+  function skip() { if (!playing) return; time -= 3; streak = 0; note.textContent = 'It was ' + word.toUpperCase(); next(); }
+  function reset() { score = 0; streak = 0; bestStreak = 0; solved = 0; time = 60; playing = true; note.textContent = 'Unscramble the word'; next(); }
+  function end() {
+    playing = false;
+    Kit.over('wordrush', score, 'Time!', 'The last word was ' + word.toUpperCase() + '.', [['Words', solved], ['Best streak', bestStreak]], reset);
+  }
+
+  document.getElementById('clear').addEventListener('click', () => { if (playing) clear(); });
+  document.getElementById('skip').addEventListener('click', skip);
+  Kit.start({ title: 'Word Rush', eyebrow: 'Word game', hue: '#c9a2ff',
+    text: 'Unscramble as many words as you can in 60 seconds. Each solve adds 2 seconds, and streaks multiply your points. Tap the letters or type them.',
+    onStart: reset });
+  window.addEventListener('keydown', e => {
+    if (!playing || Kit.busy() || e.ctrlKey || e.metaKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === 'backspace') { e.preventDefault(); if (ans.length) { tiles[ans.pop()].used = false; draw(); } }
+    else if (k === 'escape') clear();
+    else if (k === 'enter') { e.preventDefault(); skip(); }
+    else if (k.length === 1 && k >= 'a' && k <= 'z') { const i = tiles.findIndex(t => !t.used && t.c === k); if (i >= 0) pick(i); }
+  });
+  Kit.loop(dt => {
+    if (!playing || Kit.busy()) return;
+    time -= dt;
+    set(Math.max(0, Math.ceil(time)) + 's', score.toLocaleString(), streak);
+    if (time <= 0) end();
+  });
+  draw();
+})();
+</script>
+</body>
+</html>

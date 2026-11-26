@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Echo Lights · Afterglow Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Outfit:wght@400;600&display=swap">
+<link rel="stylesheet" href="../../shared/kit.css">
+<style>
+/* Layout: a 2x2 block of big colour pads centred under the HUD, with one status line above. */
+.pads{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:min(86vw,58vh,380px);aspect-ratio:1}
+.pad{border:0;border-radius:22px;background:var(--c);opacity:.3;cursor:pointer;font:700 15px var(--display);color:#0a0c24;transition:opacity .08s,transform .08s}
+.pad.lit{opacity:1;transform:scale(1.04);box-shadow:0 0 34px var(--c)}
+.pad:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+@media (prefers-reduced-motion:reduce){.pad{transition:none}.pad.lit{transform:none}}
+</style>
+</head>
+<body>
+<main class="k-stage">
+  <p class="k-note" id="note" aria-live="polite">Watch the pattern</p>
+  <div class="pads" id="pads"></div>
+</main>
+<script src="../../shared/config.js"></script>
+<script src="../../shared/leaderboard.js"></script>
+<script src="../../shared/kit.js"></script>
+<script>
+(() => {
+  'use strict';
+  const { $, beep } = Kit;
+  const COLORS = ['#7fe0d0', '#ffcf73', '#ff8fd0', '#6f9bff'], TONES = [330, 415, 494, 622], KEYS = ['q', 'w', 'a', 's'];
+  const note = document.getElementById('note'), box = document.getElementById('pads');
+  const set = Kit.hud(['Round', 'Score', 'Best']);
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  let seq = [], pos = 0, state = 'idle', score = 0, run = 0;
+
+  const pads = COLORS.map((c, i) => {
+    const b = $('button', 'pad', KEYS[i].toUpperCase()); b.type = 'button'; b.style.setProperty('--c', c);
+    b.setAttribute('aria-label', 'Pad ' + (i + 1));
+    b.addEventListener('pointerdown', e => { e.preventDefault(); press(i); });
+    b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); press(i); } });
+    box.append(b); return b;
+  });
+  function flash(i, ms) { pads[i].classList.add('lit'); beep(TONES[i], ms / 1000, 'triangle', .16); setTimeout(() => pads[i].classList.remove('lit'), ms * .75); }
+  function hud() { set(seq.length, score.toLocaleString(), Arcade.personalBest('echo').toLocaleString()); }
+  async function show() {
+    const my = run; state = 'show'; note.textContent = 'Watch the pattern';
+    seq.push(Math.random() * 4 | 0); hud();
+    const ms = Math.max(170, 460 - seq.length * 18);
+    await wait(650);
+    for (const i of seq) { if (my !== run) return; flash(i, ms); await wait(ms + 80); }
+    if (my !== run) return;
+    state = 'input'; pos = 0; note.textContent = 'Your turn';
+  }
+  function press(i) {
+    if (state !== 'input' || Kit.busy()) return;
+    flash(i, 220);
+    if (i !== seq[pos]) {
+      state = 'over'; run++;
+      Kit.over('echo', score, 'Wrong pad', 'You remembered ' + (seq.length - 1) + ' in a row.', [['Rounds', seq.length - 1]], reset);
+      return;
+    }
+    pos++;
+    if (pos === seq.length) { score += seq.length * 10; hud(); state = 'wait'; note.textContent = 'Nice'; const my = run; setTimeout(() => { if (my === run) show(); }, 500); }
+  }
+  function reset() { run++; seq = []; score = 0; show(); }
+
+  Kit.start({ title: 'Echo Lights', eyebrow: 'Memory game', hue: '#7fe0d0',
+    text: 'The pads light up in a pattern. Repeat it. Each round adds one more step and plays a little faster. Tap the pads, or use Q, W, A and S.',
+    onStart: reset });
+  window.addEventListener('keydown', e => { const i = KEYS.indexOf(e.key.toLowerCase()); if (i >= 0 && !e.repeat) press(i); });
+  hud();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Glow Hockey · Afterglow Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Outfit:wght@400;600&display=swap">
+<link rel="stylesheet" href="../../shared/kit.css">
+</head>
+<body>
+<script src="../../shared/config.js"></script>
+<script src="../../shared/leaderboard.js"></script>
+<script src="../../shared/kit.js"></script>
+<script>
+(() => {
+  'use strict';
+  /* Layout: full-screen canvas; one upright rink, top half for player one and bottom half for player two, scores at the centre line. */
+  const { beep } = Kit;
+  const K = Kit.canvas(), ctx = K.ctx;
+  const GOALS = 5, C = ['#ff8fd0', '#5fd6c4'];
+  let R, puck, m, pts = [0, 0], hits = 0, playing = false, pause = 0, keys = {}, grab = {};
+  const rink = () => { const W = Math.min(K.w - 16, 460), T = 14, B = K.h - 54; return { L: (K.w - W) / 2, W, T, B, mid: (T + B) / 2, gw: W * .42, pr: W * .05, mr: W * .09 }; };
+
+  function place(to) {
+    R = rink();
+    puck = { x: K.w / 2, y: R.mid + (to ? 1 : -1) * (R.B - R.T) * .14, vx: 0, vy: 0 };
+    m = [{ x: K.w / 2, y: R.T + (R.B - R.T) * .14, vx: 0, vy: 0, tx: null }, { x: K.w / 2, y: R.B - (R.B - R.T) * .14, vx: 0, vy: 0, tx: null }];
+    pause = .6;
+  }
+  function reset() { pts = [0, 0]; hits = 0; place(Math.random() < .5 ? 1 : 0); playing = true; }
+  function goal(who) {
+    pts[who]++; beep(880, .25); setTimeout(() => beep(1175, .25), 140);
+    if (pts[who] >= GOALS) {
+      playing = false;
+      const name = who ? 'Bottom' : 'Top';
+      Kit.over('hockey', (pts[who] - pts[1 - who]) * 100 + hits, name + ' player wins', 'Final score ' + pts[0] + '–' + pts[1] + '. The leaderboard score is the winning margin plus puck hits.', [['Puck hits', hits]], reset);
+    } else place(1 - who);
+  }
+  function step(dt) {
+    R = rink();
+    const sp = 620;
+    [['w', 's', 'a', 'd'], ['arrowup', 'arrowdown', 'arrowleft', 'arrowright']].forEach((k, i) => {
+      const a = m[i], ox = a.x, oy = a.y;
+      if (a.tx != null) { a.x += (a.tx - a.x) * Math.min(1, dt * 28); a.y += (a.ty - a.y) * Math.min(1, dt * 28); }
+      else { a.x += ((keys[k[3]] ? 1 : 0) - (keys[k[2]] ? 1 : 0)) * sp * dt; a.y += ((keys[k[1]] ? 1 : 0) - (keys[k[0]] ? 1 : 0)) * sp * dt; }
+      a.x = Math.max(R.L + R.mr, Math.min(R.L + R.W - R.mr, a.x));
+      a.y = i ? Math.max(R.mid + R.mr, Math.min(R.B - R.mr, a.y)) : Math.max(R.T + R.mr, Math.min(R.mid - R.mr, a.y));
+      a.vx = (a.x - ox) / dt; a.vy = (a.y - oy) / dt;
+    });
+    if (pause > 0) { pause -= dt; return; }
+    for (let n = 0; n < 4; n++) {
+      puck.x += puck.vx * dt / 4; puck.y += puck.vy * dt / 4;
+      if (puck.x < R.L + R.pr) { puck.x = R.L + R.pr; puck.vx = Math.abs(puck.vx); beep(200, .03); }
+      if (puck.x > R.L + R.W - R.pr) { puck.x = R.L + R.W - R.pr; puck.vx = -Math.abs(puck.vx); beep(200, .03); }
+      const inGoal = Math.abs(puck.x - K.w / 2) < R.gw / 2 - R.pr * .4;
+      if (puck.y < R.T + R.pr) { if (inGoal) { if (puck.y < R.T - R.pr) { goal(1); return; } } else { puck.y = R.T + R.pr; puck.vy = Math.abs(puck.vy); } }
+      if (puck.y > R.B - R.pr) { if (inGoal) { if (puck.y > R.B + R.pr) { goal(0); return; } } else { puck.y = R.B - R.pr; puck.vy = -Math.abs(puck.vy); } }
+      for (const a of m) {
+        const dx = puck.x - a.x, dy = puck.y - a.y, d = Math.hypot(dx, dy) || .001, min = R.pr + R.mr;
+        if (d >= min) continue;
+        const nx = dx / d, ny = dy / d, rel = (puck.vx - a.vx) * nx + (puck.vy - a.vy) * ny;
+        puck.x = a.x + nx * min; puck.y = a.y + ny * min;
+        if (rel < 0) { puck.vx -= 1.85 * rel * nx; puck.vy -= 1.85 * rel * ny; hits++; beep(420, .04); }
+      }
+    }
+    const v = Math.hypot(puck.vx, puck.vy), max = R.W * 3.4, f = Math.pow(.62, dt);
+    puck.vx *= f; puck.vy *= f;
+    if (v > max) { puck.vx *= max / v; puck.vy *= max / v; }
+  }
+  function draw() {
+    R = rink();
+    ctx.clearRect(0, 0, K.w, K.h);
+    ctx.fillStyle = 'rgba(20,18,51,.8)'; ctx.strokeStyle = 'rgba(178,171,216,.4)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(R.L, R.T, R.W, R.B - R.T, 16); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(R.L, R.mid); ctx.lineTo(R.L + R.W, R.mid); ctx.stroke();
+    ctx.beginPath(); ctx.arc(K.w / 2, R.mid, R.W * .16, 0, 7); ctx.stroke();
+    ctx.lineWidth = 6;
+    [[R.T, C[0]], [R.B, C[1]]].forEach(([y, c]) => { ctx.strokeStyle = c; ctx.beginPath(); ctx.moveTo(K.w / 2 - R.gw / 2, y); ctx.lineTo(K.w / 2 + R.gw / 2, y); ctx.stroke(); });
+    ctx.font = '700 34px Unbounded, system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.globalAlpha = .7;
+    ctx.fillStyle = C[0]; ctx.fillText(pts[0], R.L + R.W - 14, R.mid - 14);
+    ctx.fillStyle = C[1]; ctx.fillText(pts[1], R.L + R.W - 14, R.mid + 40); ctx.globalAlpha = 1;
+    if (!m) return;
+    m.forEach((a, i) => { ctx.fillStyle = C[i]; ctx.shadowColor = C[i]; ctx.shadowBlur = 16; ctx.beginPath(); ctx.arc(a.x, a.y, R.mr, 0, 7); ctx.fill(); ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(10,12,36,.5)'; ctx.beginPath(); ctx.arc(a.x, a.y, R.mr * .45, 0, 7); ctx.fill(); });
+    ctx.fillStyle = '#f3eefe'; ctx.beginPath(); ctx.arc(puck.x, puck.y, R.pr, 0, 7); ctx.fill();
+  }
+
+  Kit.start({ title: 'Glow Hockey', eyebrow: 'Two players, one screen', hue: '#5fd6c4',
+    text: 'Air hockey for two. Each player drags the mallet on their own half and tries to knock the puck into the other goal. First to 5 wins. On a keyboard, the top player uses W A S D and the bottom player uses the arrow keys.',
+    onStart: reset });
+  const aim = e => { const i = grab[e.pointerId]; if (i == null || !m) return; m[i].tx = e.clientX; m[i].ty = e.clientY; };
+  window.addEventListener('pointerdown', e => { if (!playing || Kit.busy()) return; grab[e.pointerId] = e.clientY < rink().mid ? 0 : 1; aim(e); });
+  window.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && playing && !Kit.busy()) grab[e.pointerId] = e.clientY < rink().mid ? 0 : 1; aim(e); });
+  const drop = e => { const i = grab[e.pointerId]; if (i != null && m && e.pointerType !== 'mouse') m[i].tx = null; delete grab[e.pointerId]; };
+  window.addEventListener('pointerup', drop); window.addEventListener('pointercancel', drop);
+  window.addEventListener('keydown', e => { const k = e.key.toLowerCase(); keys[k] = true; if (k.startsWith('arrow')) e.preventDefault(); const i = 'wasd'.includes(k) ? 0 : k.startsWith('arrow') ? 1 : -1; if (i >= 0 && m) m[i].tx = null; });
+  window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+  Kit.loop(dt => { if (playing && !Kit.busy() && dt > 0) step(dt); draw(); });
+})();
+</script>
+</body>
+</html>
